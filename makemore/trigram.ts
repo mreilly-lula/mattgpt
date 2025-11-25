@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { weightedRandomSample } from "../matt-torch";
-import { normalize, tensor } from "../structures/Tensor";
+import { normalize, tensor } from "../structures/OldTensor";
 
 const SPECIAL = ".";
 const START_CONTEXT = `${SPECIAL}${SPECIAL}`;
