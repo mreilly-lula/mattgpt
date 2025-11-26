@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import { weightedRandomSample } from "../matt-torch";
-import { normalize, tensor } from "../structures/OldTensor";
-
+import { Tensor } from "../structures";
 const SPECIAL = ".";
 const START_CONTEXT = `${SPECIAL}${SPECIAL}`;
 const trigramKey = (a: string, b: string, c: string): string => `${a}${b}:${c}`;
@@ -26,16 +25,16 @@ const v_to_idx = (v: string) => uniqChars.indexOf(v);
 const itos = (i: number) => uniqChars[i];
 
 const MODEL_SMOOTHING_INT = 1;
-const trigramTensor = tensor([uniqTokens.length, uniqChars.length] as const, MODEL_SMOOTHING_INT);
+const trigramTensor = new Tensor([uniqTokens.length, uniqChars.length] as const, MODEL_SMOOTHING_INT);
 
 [...trigramCounter.entries()].map(([k, v]) => {
   const chars = k.split(':');
   const x = k_to_idx(chars[0]);
   const y = v_to_idx(chars[1]);
-  trigramTensor[x][y] = v;
+  trigramTensor.set([x, y], v);
 });
 
-const normalizedTensor = normalize<[number, number]>(trigramTensor);
+const normalizedTensor = trigramTensor.normalize();
 
 let counter = 0;
 let log_likelihood = 0.0;
@@ -45,7 +44,7 @@ for (const word of words) {
     const idx1 = k_to_idx(`${wordArr[i]}${wordArr[i + 1]}`);
     const idx2 = v_to_idx(wordArr[i + 2]);
 
-    log_likelihood += Math.log(normalizedTensor[idx1][idx2]);
+    log_likelihood += Math.log(normalizedTensor.at([idx1, idx2]).data);
     counter++;
   }
 }
@@ -60,7 +59,7 @@ for (let iter = 0; iter < 20; iter++) {
   let builtStr: string[] = [];
   while (true) {
     const contextIdx = k_to_idx(context);
-    const normalizedP = normalizedTensor[contextIdx];
+    const normalizedP = normalizedTensor.row([contextIdx]).map(item => item.data);
     const nextIndex = weightedRandomSample(normalizedP, 1)[0];
     const nextChar = itos(nextIndex);
     if (nextChar === SPECIAL) {

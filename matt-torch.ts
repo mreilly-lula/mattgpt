@@ -1,6 +1,6 @@
-import { NDimTensor, Value } from "./structures";
-import { TensorView, _tensor } from "./structures/OldTensor";
-import { Tensor } from "./structures/Tensor";
+import { Tensor, Value } from "./structures";
+
+// super basic random sample algorithm, I'm sure its good enough
 export function weightedRandomSample(
   probabilities: number[],
   numSamples: number
@@ -24,7 +24,7 @@ export function weightedRandomSample(
 
 export const randInt = (low: number, high: number): number => Math.floor(Math.random() * (Math.floor(high) - Math.ceil(low) + 1) + Math.ceil(low));
 export const randFloat = (low: number, high: number) : number => Math.random() * (high - low) + low;
-
+export const sum = (arr: number[], start?: number): number => arr.reduce((acc, cur) => acc += cur, start ?? 0);
 export const zip = (a: any[], b: any[]): any[][] => {
   let result = [];
   const maxCompatLength = Math.min(a.length, b.length);
@@ -35,7 +35,6 @@ export const zip = (a: any[], b: any[]): any[][] => {
   return result;
 };
 
-export const sum = (arr: number[], start?: number): number => arr.reduce((acc, cur) => acc += cur, start ?? 0);
 
 type DeepCastToValue<T> = 
   T extends number
@@ -64,24 +63,50 @@ export const loss = (predictions: Value[], targets: Value[]) => {
   }, new Value(0));
 }
 
-export const one_hot = (inputTensor: TensorView<[1], number>, num_classes: number): number[][] => {
+export const oneHot = (vals: number[], num_classes: number): number[][] => {
   let result: number[][] = [];
-  const tensorxByDim = inputTensor.length;
-  for (let i = 0; i < tensorxByDim; i++ ) {
-    const oneHotRow = new Array(num_classes).fill(0);
-    oneHotRow[inputTensor[i]] = 1;
-    result.push(oneHotRow);
+  for (let i = 0; i < vals.length; i++) {
+    const zerosRow: number[] = new Array(num_classes).fill(0.0);
+    zerosRow[vals[i]] = 1.0;
+    result.push(zerosRow);
   }
 
-  function* fillArr() {
-    let index = 0;
-    let subIndex = 0;
-    while (index < result.length && subIndex < result[index].length) {
-      yield result[index++][subIndex++];
+  return result;
+}
+
+// box muller transform to get random numbers over a normal gaussian distribution
+// https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
+export const randomNormal = (): number => {
+  const u = 1 - Math.random();
+  const v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+// naive 2 dim O(n^3) is all i have in me right now
+export const multiply = (a: Tensor, b: Tensor): Tensor => {
+  if (a.dims.length !== 2 || b.dims.length !== 2) {
+    throw new Error('I can only do 2d matrices right now');
+  }
+
+  if (a.dims[1] !== b.dims[0]) {
+    throw new Error('Cant multiply these');
+  }
+
+  const result: Tensor = new Tensor([a.dims[0], b.dims[1]], 0);
+  for (let i = 0; i < a.dims[0]; i++) {
+    for (let j = 0; j < b.dims[1]; j++) {
+      for (let k = 0; k < a.dims[1]; k++) {
+        const currentProduct = result.at([i, j]).data;
+        const additionalProduct = a.at([i, k]).data * b.at([k, j]).data;
+        result.set([i, j], currentProduct + additionalProduct);
+      }
     }
   }
 
-  const t = _tensor([result.length, result[0].length] as const, fillArr());
+  return result;
+}
 
-  return t;
+export const softmax = (t: Tensor): Tensor => {
+  const exponentiated = t.map(item => item.exp());
+  return exponentiated.normalize();
 }
