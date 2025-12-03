@@ -6,7 +6,7 @@ type ValueInitializer = number | Value | ((coords: number[]) => number | Value);
 const isValue = (candidate: unknown): candidate is Value =>
   candidate instanceof Value;
 
-type Slice = {
+interface SliceParams {
   start?: number;
   end?: number;
   step?: number;
@@ -229,7 +229,7 @@ export class Tensor {
    * @param slice.end - where to end the slice within axis
    * @param slice.step - positive means go from start to end, negative goes from end to start (allow for inversion)
    */
-  slice(dim: number, slice: Slice): Tensor {
+  slice(dim: number, slice: SliceParams): Tensor {
     if (dim < 0 || dim >= this.dims.length) {
       throw new Error(`Axis ${dim} is out of bounds for tensor with ${this.dims.length} dims`);
     }
