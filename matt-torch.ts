@@ -1,3 +1,4 @@
+import { log } from "node:console";
 import { Tensor, Value } from "./structures";
 
 // super basic random sample algorithm, I'm sure its good enough
@@ -5,7 +6,10 @@ export function weightedRandomSample(
   probabilities: number[],
   numSamples: number
 ): number[] {
-  const allowedResultValues = Array.from({ length: probabilities.length }, (_, index) => index);
+  const allowedResultValues = Array.from(
+    { length: probabilities.length },
+    (_, index) => index
+  );
 
   let result: number[] = [];
   for (let step = 0; step < numSamples; step++) {
@@ -14,10 +18,19 @@ export function weightedRandomSample(
     for (let i = 0; i < probabilities.length; i++) {
       cursor += probabilities[i];
       if (cursor >= randomNumber) {
-         result.push(allowedResultValues[i]);
-         break;
+        result.push(allowedResultValues[i]);
+        break;
       }
     }
+  }
+  return result;
+}
+
+export function shuffle(array: any[]): any[] {
+  let result = array;
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
 }
@@ -41,7 +54,7 @@ export function multinomial(values: Tensor, numSamples: number): number[] {
     throw new Error("Sum of weights must be positive to sample");
   }
 
-  const probabilities = weights.map(w => w.data / totalWeight);
+  const probabilities = weights.map((w) => w.data / totalWeight);
   const draws: number[] = [];
 
   for (let sample = 0; sample < numSamples; sample++) {
@@ -59,9 +72,14 @@ export function multinomial(values: Tensor, numSamples: number): number[] {
   return draws;
 }
 
-export const randInt = (low: number, high: number): number => Math.floor(Math.random() * (Math.floor(high) - Math.ceil(low) + 1) + Math.ceil(low));
-export const randFloat = (low: number, high: number) : number => Math.random() * (high - low) + low;
-export const sum = (arr: number[], start?: number): number => arr.reduce((acc, cur) => acc += cur, start ?? 0);
+export const randInt = (low: number, high: number): number =>
+  Math.floor(
+    Math.random() * (Math.floor(high) - Math.ceil(low) + 1) + Math.ceil(low)
+  );
+export const randFloat = (low: number, high: number): number =>
+  Math.random() * (high - low) + low;
+export const sum = (arr: number[], start?: number): number =>
+  arr.reduce((acc, cur) => (acc += cur), start ?? 0);
 export const zip = (a: any[], b: any[]): any[][] => {
   let result = [];
   const maxCompatLength = Math.min(a.length, b.length);
@@ -72,33 +90,31 @@ export const zip = (a: any[], b: any[]): any[][] => {
   return result;
 };
 
-
-type DeepCastToValue<T> = 
-  T extends number
-    ? Value
-    : T extends Array<infer U>
-      ? DeepCastToValue<U>[]
-      : never;
+type DeepCastToValue<T> = T extends number
+  ? Value
+  : T extends Array<infer U>
+  ? DeepCastToValue<U>[]
+  : never;
 
 export function valuize<T>(data: T): DeepCastToValue<T> {
   if (Array.isArray(data)) {
-    return data.map(item => valuize(item)) as DeepCastToValue<T>;
+    return data.map((item) => valuize(item)) as DeepCastToValue<T>;
   }
-  
+
   return new Value(data as number) as DeepCastToValue<T>;
-};
+}
 
 export const loss = (predictions: Value[], targets: Value[]) => {
   const combined = zip(targets, predictions);
   let result: Value[] = [];
   for (const combo of combined) {
     // calculate distance
-    result.push((combo[0].subtract(combo[1]).pow(2)))
+    result.push(combo[0].subtract(combo[1]).pow(2));
   }
   return result.reduce((acc: Value, cur: Value) => {
-    return acc.add(cur)
+    return acc.add(cur);
   }, new Value(0));
-}
+};
 
 export const oneHot = (vals: number[], num_classes: number): number[][] => {
   let result: number[][] = [];
@@ -109,7 +125,7 @@ export const oneHot = (vals: number[], num_classes: number): number[][] => {
   }
 
   return result;
-}
+};
 
 // box muller transform to get random numbers over a normal gaussian distribution
 // https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
@@ -117,38 +133,74 @@ export const randomNormal = (): number => {
   const u = 1 - Math.random();
   const v = Math.random();
   return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-}
+};
 
-// naive 2 dim O(n^3) is all i have in me right now
 export const multiply = (a: Tensor, b: Tensor): Tensor => {
   if (a.dims.length !== 2 || b.dims.length !== 2) {
-    throw new Error('I can only do 2d matrices right now');
+    throw new Error("I can only do 2d matrices right now");
   }
 
   if (a.dims[1] !== b.dims[0]) {
-    throw new Error('Cant multiply these');
+    throw new Error("Cant multiply these");
   }
 
-  const result: Tensor = new Tensor([a.dims[0], b.dims[1]], 0);
-  for (let i = 0; i < a.dims[0]; i++) {
-    for (let j = 0; j < b.dims[1]; j++) {
-      for (let k = 0; k < a.dims[1]; k++) {
-        const currentProduct = result.at([i, j]);
-        const additionalProduct = a.at([i, k]).multiply(b.at([k, j]));
-        result.set([i, j], currentProduct.add(additionalProduct));
+  const rows = a.dims[0];
+  const shared = a.dims[1];
+  const cols = b.dims[1];
+  const result: Tensor = new Tensor([rows, cols], 0);
+  result.shape()
+  // Cache rows/columns so the inner loop only performs Value ops.
+  const aRows: Value[][] = new Array(rows);
+  for (let i = 0; i < rows; i++) {
+    aRows[i] = a.vrow([i]);
+  }
+
+  const bCols: Value[][] = new Array(cols);
+  for (let j = 0; j < cols; j++) {
+    const column = new Array(shared);
+    for (let k = 0; k < shared; k++) {
+      column[k] = b.at([k, j]);
+    }
+    bCols[j] = column as Value[];
+  }
+
+  for (let i = 0; i < rows; i++) {
+    const row = aRows[i];
+    for (let j = 0; j < cols; j++) {
+      const col = bCols[j];
+      let sum: Value | null = null;
+      for (let k = 0; k < shared; k++) {
+        const product = row[k].multiply(col[k]);
+        sum = sum ? sum.add(product) : product;
       }
+      result.set([i, j], sum ?? new Value(0));
     }
   }
 
   return result;
-}
+};
 
 export const softmax = (t: Tensor): Tensor => {
-  const exponentiated = t.map(item => item.exp());
+  const exponentiated = t.map((item) => item.exp());
   return exponentiated.normalize();
-}
+};
 
 export const arrange = (count: number): Tensor => {
   const filler = new Array(count).fill(0).map((_, index) => index);
   return Tensor.fromNestedArray([count], filler);
-}
+};
+
+export const crossEntropy = (logits: Tensor, target: Tensor): Value => {
+  const sMax = softmax(logits);
+  const rowIdxs = arrange(sMax.dims[0]);
+  const picked = rowIdxs.map((_, [row]) => {
+    const col = target.at([row]).data;
+    return sMax.at([row, col]);
+  });
+  const negLogLikelihood = picked
+    .map((val) => val.log())
+    .sum()
+    .divide(new Value(picked.size))
+    .negative();
+  return negLogLikelihood;
+};
